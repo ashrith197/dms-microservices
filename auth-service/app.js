@@ -3,6 +3,7 @@ const express = require("express");
 const cors = require("cors");
 const connectDB = require("./db");
 const authRoutes = require("./src/routes/authRoutes");
+const validateEnv = require("./src/config/validateEnv");
 
 const app = express();
 
@@ -16,9 +17,6 @@ const corsOptions = {
 // Middleware
 app.use(cors(corsOptions));
 app.use(express.json());
-
-// DB Connection
-connectDB();
 
 // Mount auth routes (rate limiting applied per-route in authRoutes.js)
 app.use("/auth", authRoutes);
@@ -39,6 +37,20 @@ app.use((err, req, res, next) => {
   res.status(500).json({ success: false, message: "Internal server error" });
 });
 
-app.listen(process.env.PORT, () => {
-  console.log(`Auth Service running on port ${process.env.PORT}`);
-});
+const start = async () => {
+  validateEnv(["PORT", "MONGO_URI", "JWT_SECRET", "INTERNAL_SERVICE_KEY"]);
+  await connectDB();
+
+  app.listen(process.env.PORT, () => {
+    console.log(`Auth Service running on port ${process.env.PORT}`);
+  });
+};
+
+if (require.main === module) {
+  start().catch((err) => {
+    console.error("Failed to start Auth Service:", err.message);
+    process.exit(1);
+  });
+}
+
+module.exports = { app, start };

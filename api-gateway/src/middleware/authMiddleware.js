@@ -20,7 +20,10 @@ const protect = async (req, res, next) => {
     const response = await axios.get(
       `${process.env.AUTH_SERVICE_URL}/auth/verify-token`,
       {
-        headers: { Authorization: authHeader },
+        headers: {
+          Authorization: authHeader,
+          "x-internal-service-key": process.env.INTERNAL_SERVICE_KEY,
+        },
         timeout: 5000,
       }
     );

@@ -1,6 +1,14 @@
 const User = require("../models/User");
 const jwt = require("jsonwebtoken");
 
+const sendInternalError = (res, err, context) => {
+  console.error(`${context}:`, err);
+  return res.status(500).json({
+    success: false,
+    message: "Internal server error",
+  });
+};
+
 const generateToken = (user) => {
   return jwt.sign(
     {
@@ -51,7 +59,7 @@ const register = async (req, res) => {
       },
     });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    return sendInternalError(res, err, "Register error");
   }
 };
 
@@ -97,7 +105,7 @@ const login = async (req, res) => {
       },
     });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    return sendInternalError(res, err, "Login error");
   }
 };
 
@@ -150,7 +158,7 @@ const verifyToken = async (req, res) => {
         message: "Invalid token",
       });
     }
-    res.status(500).json({ success: false, message: err.message });
+    return sendInternalError(res, err, "Verify token error");
   }
 };
 
