@@ -1,11 +1,15 @@
 {
+  "name": "notification-service",
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "nodemon app.js",
+    "start": "node app.js"
+  },
   "dependencies": {
+    "cors": "^2.8.5",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
     "mongoose": "^9.6.2"
-  },
-  "scripts": {
-    "dev": "nodemon app.js"
   },
   "devDependencies": {
     "nodemon": "^3.1.14"
