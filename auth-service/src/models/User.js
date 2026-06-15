@@ -23,12 +23,20 @@ const userSchema = new mongoose.Schema(
     },
     role: {
       type: String,
-      enum: ["user", "admin"],
-      default: "user",
+      enum: ["employee", "manager", "admin"],
+      default: "employee",
+    },
+    organisationId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Organisation",
+      default: null,
     },
   },
   { timestamps: true }
 );
+
+// Index on organisationId for efficient multi-tenant queries
+userSchema.index({ organisationId: 1 });
 
 // Hash password before saving
 userSchema.pre("save", async function () {

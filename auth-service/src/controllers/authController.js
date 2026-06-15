@@ -1,4 +1,6 @@
 const User = require("../models/User");
+const Organisation = require("../models/Organisation");
+const mongoose = require("mongoose");
 const jwt = require("jsonwebtoken");
 
 const sendInternalError = (res, err, context) => {
@@ -16,6 +18,7 @@ const generateToken = (user) => {
       email: user.email,
       role: user.role,
       name: user.name,
+      organisationId: user.organisationId,
     },
     process.env.JWT_SECRET,
     { expiresIn: process.env.JWT_EXPIRES_IN || "7d" }
@@ -25,12 +28,20 @@ const generateToken = (user) => {
 // POST /auth/register
 const register = async (req, res) => {
   try {
-    const { name, email, password } = req.body;
+    const { name, email, password, isAdmin, organisationName } = req.body;
 
     if (!name || !email || !password) {
       return res.status(400).json({
         success: false,
         message: "Name, email and password are required",
+      });
+    }
+
+    // Check if isAdmin is true and organisationName is missing
+    if (isAdmin === true && !organisationName) {
+      return res.status(400).json({
+        success: false,
+        message: "Organisation name is required for admin registration",
       });
     }
 
@@ -42,9 +53,69 @@ const register = async (req, res) => {
       });
     }
 
-    // SECURITY: Always create users with "user" role
-    // Admin accounts must be created manually via database
-    const user = await User.create({ name, email, password, role: "user" });
+    // Admin registration flow with transaction
+    if (isAdmin === true && organisationName) {
+      const session = await mongoose.startSession();
+      session.startTransaction();
+      
+      try {
+        // Step 1: Create Organisation with temporary adminId (placeholder)
+        const organisation = await Organisation.create(
+          [{ name: organisationName, adminId: new mongoose.Types.ObjectId() }],
+          { session }
+        );
+
+        // Step 2: Create User with role='admin' and organisationId
+        const user = await User.create(
+          [{
+            name,
+            email,
+            password,
+            role: "admin",
+            organisationId: organisation[0]._id
+          }],
+          { session }
+        );
+
+        // Step 3: Update Organisation.adminId with created user._id
+        organisation[0].adminId = user[0]._id;
+        await organisation[0].save({ session });
+
+        // Step 4: Commit transaction
+        await session.commitTransaction();
+
+        // Step 5: Generate token with organisationId populated
+        const token = generateToken(user[0]);
+
+        // Step 6: Return response with user object including organisationId
+        return res.status(201).json({
+          success: true,
+          message: "User registered successfully",
+          token,
+          user: {
+            id: user[0]._id,
+            name: user[0].name,
+            email: user[0].email,
+            role: user[0].role,
+            organisationId: user[0].organisationId,
+          },
+        });
+      } catch (error) {
+        await session.abortTransaction();
+        throw error;
+      } finally {
+        session.endSession();
+      }
+    }
+
+    // Standard registration flow: Create employee user with null organisationId
+    const user = await User.create({ 
+      name, 
+      email, 
+      password, 
+      role: "employee",
+      organisationId: null 
+    });
     const token = generateToken(user);
 
     res.status(201).json({
@@ -56,6 +127,7 @@ const register = async (req, res) => {
         name: user.name,
         email: user.email,
         role: user.role,
+        organisationId: user.organisationId,
       },
     });
   } catch (err) {
@@ -102,6 +174,7 @@ const login = async (req, res) => {
         name: user.name,
         email: user.email,
         role: user.role,
+        organisationId: user.organisationId,
       },
     });
   } catch (err) {
@@ -141,6 +214,7 @@ const verifyToken = async (req, res) => {
         name: user.name,
         email: user.email,
         role: user.role,
+        organisationId: user.organisationId,
       },
     });
   } catch (err) {
