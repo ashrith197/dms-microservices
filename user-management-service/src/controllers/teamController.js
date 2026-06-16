@@ -9,6 +9,8 @@ const syncMemberEmails = async (memberIds) => {
   return users.map((u) => u.email);
 };
 
+const escapeRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
 // ─────────────────────────────────────────
 // POST /teams
 // Manager creates a team
@@ -17,6 +19,7 @@ const createTeam = async (req, res) => {
   try {
     const manager = req.gatewayUser;
     const { name, description, memberIds } = req.body;
+    const trimmedName = name.trim();
 
     if (!name) {
       return res.status(400).json({ success: false, message: "Team name is required" });
@@ -50,18 +53,54 @@ const createTeam = async (req, res) => {
       memberEmails = members.map((m) => m.email);
     }
 
-    const team = await Team.create({
-      name,
-      description: description || "",
-      managerId: manager.userId,
-      memberIds: validatedMemberIds,
-      memberEmails,
+    const existingTeam = await Team.findOne({
       organisationId: manager.organisationId,
+      name: { $regex: new RegExp(`^${escapeRegExp(trimmedName)}$`, "i") },
     });
+
+    let team;
+
+    if (existingTeam) {
+      const existingMemberIds = new Set(
+        existingTeam.memberIds.map((id) => id.toString())
+      );
+      const existingMemberEmails = new Set(existingTeam.memberEmails);
+
+      validatedMemberIds.forEach((memberId, index) => {
+        const memberIdString = memberId.toString();
+        if (!existingMemberIds.has(memberIdString)) {
+          existingTeam.memberIds.push(memberId);
+          existingMemberIds.add(memberIdString);
+        }
+
+        const email = memberEmails[index];
+        if (email && !existingMemberEmails.has(email)) {
+          existingTeam.memberEmails.push(email);
+          existingMemberEmails.add(email);
+        }
+      });
+
+      if (description !== undefined) {
+        existingTeam.description = description;
+      }
+
+      team = await existingTeam.save();
+    } else {
+      team = await Team.create({
+        name: trimmedName,
+        description: description || "",
+        managerId: manager.userId,
+        memberIds: validatedMemberIds,
+        memberEmails,
+        organisationId: manager.organisationId,
+      });
+    }
 
     res.status(201).json({
       success: true,
-      message: "Team created successfully",
+      message: existingTeam
+        ? "Team already existed, members updated successfully"
+        : "Team created successfully",
       team,
     });
   } catch (err) {
