@@ -51,6 +51,7 @@ test("protect verifies tokens through auth-service and forwards user headers", a
           email: "test@example.com",
           role: "user",
           name: "Test User",
+          organisationId: "org-123",
         },
       },
     };
@@ -69,6 +70,34 @@ test("protect verifies tokens through auth-service and forwards user headers", a
   assert.equal(req.headers["x-user-email"], "test@example.com");
   assert.equal(req.headers["x-user-role"], "user");
   assert.equal(req.headers["x-user-name"], "Test User");
+  assert.equal(req.headers["x-organisation-id"], "org-123");
+});
+
+test("protect sets x-organisation-id to empty string when organisationId is missing", async () => {
+  process.env.AUTH_SERVICE_URL = "http://localhost:4000";
+  process.env.INTERNAL_SERVICE_KEY = "internal-key";
+
+  axios.get = async () => ({
+    data: {
+      user: {
+        id: "user-2",
+        email: "noorg@example.com",
+        role: "employee",
+        name: "No Org User",
+      },
+    },
+  });
+
+  const req = { headers: { authorization: "Bearer valid-token" } };
+  const res = createResponse();
+  let nextCalled = false;
+
+  await protect(req, res, () => {
+    nextCalled = true;
+  });
+
+  assert.equal(nextCalled, true);
+  assert.equal(req.headers["x-organisation-id"], "");
 });
 
 test("protect forwards auth-service rejection responses", async () => {

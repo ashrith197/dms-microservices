@@ -26,6 +26,8 @@ const createApp = () => {
         document: process.env.DOCUMENT_SERVICE_URL,
         search: process.env.SEARCH_SERVICE_URL,
         notification: process.env.NOTIFICATION_SERVICE_URL,
+        userManagement: process.env.USER_MANAGEMENT_SERVICE_URL,
+        logging: process.env.LOGGING_SERVICE_URL,
       },
     });
   });
@@ -64,18 +66,24 @@ const start = () => {
     "DOCUMENT_SERVICE_URL",
     "SEARCH_SERVICE_URL",
     "INTERNAL_SERVICE_KEY",
+    "USER_MANAGEMENT_SERVICE_URL",
+    "LOGGING_SERVICE_URL",
   ]);
 
   const app = createApp();
 
   app.listen(process.env.PORT, () => {
     console.log(`API Gateway running on port ${process.env.PORT}`);
-    console.log(`-> Auth Service:         ${process.env.AUTH_SERVICE_URL}`);
-    console.log(`-> Document Service:     ${process.env.DOCUMENT_SERVICE_URL}`);
-    console.log(`-> Search Service:       ${process.env.SEARCH_SERVICE_URL}`);
+    console.log(`-> Auth Service:            ${process.env.AUTH_SERVICE_URL}`);
+    console.log(`-> Document Service:        ${process.env.DOCUMENT_SERVICE_URL}`);
+    console.log(`-> Search Service:          ${process.env.SEARCH_SERVICE_URL}`);
     console.log(
-      `-> Notification Service: ${process.env.NOTIFICATION_SERVICE_URL}`
+      `-> Notification Service:    ${process.env.NOTIFICATION_SERVICE_URL}`
     );
+    console.log(
+      `-> User Management Service: ${process.env.USER_MANAGEMENT_SERVICE_URL}`
+    );
+    console.log(`-> Logging Service:         ${process.env.LOGGING_SERVICE_URL}`);
   });
 };
 

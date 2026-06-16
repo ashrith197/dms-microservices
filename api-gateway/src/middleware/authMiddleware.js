@@ -44,6 +44,9 @@ const protect = async (req, res, next) => {
     setUserHeader(req, "x-user-role", user.role);
     setUserHeader(req, "x-user-name", user.name);
 
+    // Inject organisationId so all downstream services can scope queries
+    req.headers["x-organisation-id"] = user.organisationId || "";
+
     next();
   } catch (err) {
     if (err.response) {
