@@ -52,12 +52,25 @@ const register = async (req, res) => {
         message: "User already exists with this email",
       });
     }
+    const existingname = await User.findOne({ name });
+    if (existingname) {
+      return res.status(409).json({
+        success: false,
+        message: "User already exists with this name",
+      });
+    }
 
     // Admin registration flow with transaction
     if (isAdmin === true && organisationName) {
       const session = await mongoose.startSession();
       session.startTransaction();
-      
+      const existingorg = await Organisation.findOne({ name: organisationName });
+      if (existingorg) {
+        return res.status(409).json({
+          success: false,
+          message: "Organisation already exists with this name",
+        });
+      }
       try {
         // Step 1: Create Organisation with temporary adminId (placeholder)
         const organisation = await Organisation.create(
