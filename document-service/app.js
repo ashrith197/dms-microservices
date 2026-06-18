@@ -4,6 +4,7 @@ const express = require("express");
 const cors = require("cors");
 const connectDB = require("./db");
 const documentRoutes = require("./src/routes/documentRoutes");
+const permissionGroupRoutes = require("./src/routes/permissionGroupRoutes");
 
 const app = express();
 
@@ -11,7 +12,7 @@ app.use(cors());
 app.use(express.json());
 
 connectDB();
-
+app.use("/documents/permission-groups", permissionGroupRoutes);
 app.use("/documents", documentRoutes);
 
 app.get("/health", (req, res) => {

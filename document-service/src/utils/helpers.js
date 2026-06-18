@@ -63,4 +63,14 @@ const sanitizeOwnerId = (ownerId) => {
   return String(ownerId).replace(/[^a-zA-Z0-9_-]/g, "_");
 };
 
-module.exports = { extractUserHeaders, parseTags, sanitizeOwnerId };
+/**
+ * Extracts organisationId from x-organisation-id header
+ * Returns null if missing or empty
+ */
+const extractOrgId = (req) => {
+  const orgId = req.headers["x-organisation-id"];
+  if (!orgId || orgId.trim() === "") return null;
+  return orgId.trim();
+};
+
+module.exports = { extractUserHeaders, parseTags, sanitizeOwnerId, extractOrgId };

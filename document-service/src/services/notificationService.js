@@ -22,6 +22,7 @@ const notifyDocumentUploaded = (document) => {
     title: document.title,
     ownerId: document.ownerId,
     ownerEmail: document.ownerEmail,
+    organisationId: document.organisationId,
     filename: document.filename,
     timestamp: new Date().toISOString(),
   });
@@ -34,6 +35,7 @@ const notifyDocumentDeleted = (document) => {
     title: document.title,
     ownerId: document.ownerId,
     ownerEmail: document.ownerEmail,
+    organisationId: document.organisationId,
     timestamp: new Date().toISOString(),
   });
 };
@@ -45,6 +47,7 @@ const notifyDocumentUpdated = (document) => {
     title: document.title,
     ownerId: document.ownerId,
     ownerEmail: document.ownerEmail,
+    organisationId: document.organisationId,
     timestamp: new Date().toISOString(),
   });
 };

@@ -1,7 +1,8 @@
 const path = require("path");
 const fs = require("fs");
 const Document = require("../models/Document");
-const { extractUserHeaders, parseTags, sanitizeOwnerId } = require("../utils/helpers");
+const { extractUserHeaders, parseTags, sanitizeOwnerId, extractOrgId } = require("../utils/helpers");
+const { hasDocumentAccess } = require("../utils/permissionHelper");
 const {
   notifyDocumentUploaded,
   notifyDocumentDeleted,
@@ -28,7 +29,7 @@ const uploadDocument = async (req, res) => {
       return res.status(400).json({ success: false, message: "No file uploaded" });
     }
 
-    const { title, category, tags } = req.body;
+    const { title, category, tags, teamId, permissionGroupIds } = req.body;
 
     if (!title || !category) {
       if (fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
@@ -38,6 +39,8 @@ const uploadDocument = async (req, res) => {
       });
     }
 
+    const organisationId = extractOrgId(req);
+
     // Build normalized filepath explicitly using sanitized ownerId.
     // Guarantees MongoDB stores uploads/{sanitizedUserId}/{uuid}.ext
     // independent of Windows path behavior.
@@ -45,6 +48,16 @@ const uploadDocument = async (req, res) => {
     const normalizedPath = path
       .join(process.env.UPLOAD_DIR || "uploads", safeOwnerId, req.file.filename)
       .replace(/\\/g, "/");
+
+    // Parse permissionGroupIds if sent as JSON string
+    let parsedPermissionGroupIds = [];
+    if (permissionGroupIds) {
+      try {
+        parsedPermissionGroupIds = typeof permissionGroupIds === "string"
+          ? JSON.parse(permissionGroupIds)
+          : permissionGroupIds;
+      } catch { parsedPermissionGroupIds = []; }
+    }
 
     const document = await Document.create({
       title,
@@ -57,6 +70,10 @@ const uploadDocument = async (req, res) => {
       size: req.file.size,
       ownerId: user.ownerId,
       ownerEmail: user.ownerEmail,
+      organisationId: organisationId || null,
+      teamId: teamId || null,
+      permissionGroupIds: parsedPermissionGroupIds,
+      status: "draft",
     });
 
     notifyDocumentUploaded(document);
@@ -84,11 +101,22 @@ const getDocuments = async (req, res) => {
       });
     }
 
+    const organisationId = extractOrgId(req);
+    const { status, teamId } = req.query;
+
     const query = { isDeleted: false };
 
+    // Org scoping — always filter by org if available
+    if (organisationId) query.organisationId = organisationId;
+
+    // Role-based scoping
     if (user.userRole !== "admin") {
       query.ownerId = user.ownerId;
     }
+
+    // Optional filters
+    if (status) query.status = status;
+    if (teamId) query.teamId = teamId;
 
     const documents = await Document.find(query).sort({ createdAt: -1 });
 
@@ -115,19 +143,31 @@ const getDocumentById = async (req, res) => {
       });
     }
 
-    const document = await Document.findOne({
-      _id: req.params.id,
-      isDeleted: false,
-    });
+    const organisationId = extractOrgId(req);
+
+    const query = { _id: req.params.id, isDeleted: false };
+    if (organisationId) query.organisationId = organisationId;
+
+    const document = await Document.findOne(query);
 
     if (!document) {
       return res.status(404).json({ success: false, message: "Document not found" });
     }
 
+    // Ownership check for non-admins
     if (user.userRole !== "admin" && document.ownerId !== user.ownerId) {
       return res.status(403).json({
         success: false,
         message: "Access denied — you do not own this document",
+      });
+    }
+
+    // Permission group check
+    const canAccess = await hasDocumentAccess(user.ownerId, user.userRole, document);
+    if (!canAccess) {
+      return res.status(403).json({
+        success: false,
+        message: "Access denied — you do not have permission to view this document",
       });
     }
 
@@ -153,10 +193,12 @@ const downloadDocument = async (req, res) => {
       });
     }
 
-    const document = await Document.findOne({
-      _id: req.params.id,
-      isDeleted: false,
-    });
+    const organisationId = extractOrgId(req);
+
+    const query = { _id: req.params.id, isDeleted: false };
+    if (organisationId) query.organisationId = organisationId;
+
+    const document = await Document.findOne(query);
 
     if (!document) {
       return res.status(404).json({ success: false, message: "Document not found" });
@@ -166,6 +208,14 @@ const downloadDocument = async (req, res) => {
       return res.status(403).json({
         success: false,
         message: "Access denied — you do not own this document",
+      });
+    }
+
+    const canAccess = await hasDocumentAccess(user.ownerId, user.userRole, document);
+    if (!canAccess) {
+      return res.status(403).json({
+        success: false,
+        message: "Access denied — you do not have permission to download this document",
       });
     }
 
@@ -207,10 +257,12 @@ const updateDocument = async (req, res) => {
       });
     }
 
-    const document = await Document.findOne({
-      _id: req.params.id,
-      isDeleted: false,
-    });
+    const organisationId = extractOrgId(req);
+
+    const query = { _id: req.params.id, isDeleted: false };
+    if (organisationId) query.organisationId = organisationId;
+
+    const document = await Document.findOne(query);
 
     if (!document) {
       return res.status(404).json({ success: false, message: "Document not found" });
@@ -224,7 +276,7 @@ const updateDocument = async (req, res) => {
     }
 
     // Whitelist — never allow updating ownerId, filepath, storedFilename, mimetype, size
-    const allowedUpdates = ["title", "category", "tags"];
+    const allowedUpdates = ["title", "category", "tags", "teamId", "permissionGroupIds"];
     const updates = {};
 
     allowedUpdates.forEach((field) => {
@@ -237,7 +289,7 @@ const updateDocument = async (req, res) => {
     if (Object.keys(updates).length === 0) {
       return res.status(400).json({
         success: false,
-        message: "No valid fields to update. Allowed: title, category, tags",
+        message: "No valid fields to update. Allowed: title, category, tags, teamId, permissionGroupIds",
       });
     }
 
@@ -275,10 +327,12 @@ const deleteDocument = async (req, res) => {
       });
     }
 
-    const document = await Document.findOne({
-      _id: req.params.id,
-      isDeleted: false,
-    });
+    const organisationId = extractOrgId(req);
+
+    const query = { _id: req.params.id, isDeleted: false };
+    if (organisationId) query.organisationId = organisationId;
+
+    const document = await Document.findOne(query);
 
     if (!document) {
       return res.status(404).json({ success: false, message: "Document not found" });

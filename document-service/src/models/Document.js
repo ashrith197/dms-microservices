@@ -50,6 +50,39 @@ const documentSchema = new mongoose.Schema(
       required: true,
       // from x-user-email header
     },
+    // ── NEW: Multi-tenancy ──────────────────────────────
+    organisationId: {
+      type: mongoose.Schema.Types.ObjectId,
+      default: null,           // nullable initially for migration — made required after
+    },
+    // ── NEW: Team scoping ───────────────────────────────
+    teamId: {
+      type: mongoose.Schema.Types.ObjectId,
+      default: null,           // optional — document may not belong to a team
+    },
+    // ── NEW: Permission groups ──────────────────────────
+    permissionGroupIds: {
+      type: [mongoose.Schema.Types.ObjectId],
+      default: [],             // empty = public to entire organisation
+    },
+    // ── NEW: Approval workflow ──────────────────────────
+    status: {
+      type: String,
+      enum: ["draft", "pending_approval", "approved", "rejected"],
+      default: "draft",
+    },
+    approvedBy: {
+      type: String,            // userId of the manager who approved/rejected
+      default: null,
+    },
+    approvalDate: {
+      type: Date,
+      default: null,
+    },
+    rejectionReason: {
+      type: String,
+      default: null,
+    },
     isDeleted: {
       type: Boolean,
       default: false,
@@ -59,8 +92,14 @@ const documentSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+// Existing indexes
 documentSchema.index({ ownerId: 1 });
 documentSchema.index({ isDeleted: 1 });
 documentSchema.index({ title: "text", category: "text", tags: "text" });
+
+// New indexes
+documentSchema.index({ organisationId: 1, isDeleted: 1 });
+documentSchema.index({ status: 1 });
+documentSchema.index({ teamId: 1 });
 
 module.exports = mongoose.model("Document", documentSchema);

@@ -9,6 +9,11 @@ const {
   updateDocument,
   deleteDocument,
 } = require("../controllers/documentController");
+const {
+  submitForApproval,
+  approveDocument,
+  rejectDocument,
+} = require("../controllers/approvalController");
 
 const handleUpload = (req, res, next) => {
   upload.single("file")(req, res, (err) => {
@@ -25,6 +30,12 @@ const handleUpload = (req, res, next) => {
   });
 };
 
+// Approval workflow — before /:id to prevent route shadowing
+router.post("/:id/submit-for-approval", submitForApproval);
+router.post("/:id/approve",             approveDocument);
+router.post("/:id/reject",              rejectDocument);
+
+// Core CRUD
 router.post("/", handleUpload, uploadDocument);
 router.get("/", getDocuments);
 router.get("/:id/download", downloadDocument);   // ← before /:id to prevent route shadowing
