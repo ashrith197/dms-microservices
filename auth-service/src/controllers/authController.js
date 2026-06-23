@@ -62,8 +62,6 @@ const register = async (req, res) => {
 
     // Admin registration flow with transaction
     if (isAdmin === true && organisationName) {
-      const session = await mongoose.startSession();
-      session.startTransaction();
       const existingorg = await Organisation.findOne({ name: organisationName });
       if (existingorg) {
         return res.status(409).json({
@@ -71,6 +69,8 @@ const register = async (req, res) => {
           message: "Organisation already exists with this name",
         });
       }
+      const session = await mongoose.startSession();
+      session.startTransaction();
       try {
         // Step 1: Create Organisation with temporary adminId (placeholder)
         const organisation = await Organisation.create(

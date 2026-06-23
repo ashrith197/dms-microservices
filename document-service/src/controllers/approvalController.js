@@ -39,10 +39,11 @@ const submitForApproval = async (req, res) => {
     }
 
     const organisationId = extractOrgId(req);
-
+    console.log(req.headers);
     const query = { _id: req.params.id, isDeleted: false };
     if (organisationId) query.organisationId = organisationId;
-
+    console.log(query);
+    console.log(organisationId);
     const document = await Document.findOne(query);
 
     if (!document) {
@@ -121,7 +122,36 @@ const approveDocument = async (req, res) => {
         message: `Document cannot be approved — current status is '${document.status}'. Only 'pending_approval' documents can be approved.`,
       });
     }
+    // If document belongs to a team, only that team's manager can approve/reject
+    if (document.teamId && user.userRole === "manager") {
+      try {
+        const teamResponse = await axios.get(
+          `${process.env.USER_MANAGEMENT_SERVICE_URL}/teams/${document.teamId}`,
+          {
+            headers: {
+              "x-user-id": user.ownerId,
+              "x-user-role": user.userRole,
+              "x-organisation-id": document.organisationId?.toString() || "",
+            },
+            timeout: 5000,
+          }
+        );
 
+        const team = teamResponse.data.team;
+
+        if (team.managerId.toString() !== user.ownerId) {
+          return res.status(403).json({
+            success: false,
+            message: "Only the manager of the document's team can approve or reject it",
+          });
+        }
+      } catch (err) {
+        return res.status(503).json({
+          success: false,
+          message: "Could not verify team manager — User Management Service unavailable",
+        });
+      }
+    }
     document.status = "approved";
     document.approvedBy = user.ownerId;
     document.approvalDate = new Date();
@@ -192,7 +222,36 @@ const rejectDocument = async (req, res) => {
         message: `Document cannot be rejected — current status is '${document.status}'. Only 'pending_approval' documents can be rejected.`,
       });
     }
+    // If document belongs to a team, only that team's manager can approve/reject
+    if (document.teamId && user.userRole === "manager") {
+      try {
+        const teamResponse = await axios.get(
+          `${process.env.USER_MANAGEMENT_SERVICE_URL}/teams/${document.teamId}`,
+          {
+            headers: {
+              "x-user-id": user.ownerId,
+              "x-user-role": user.userRole,
+              "x-organisation-id": document.organisationId?.toString() || "",
+            },
+            timeout: 5000,
+          }
+        );
 
+        const team = teamResponse.data.team;
+
+        if (team.managerId.toString() !== user.ownerId) {
+          return res.status(403).json({
+            success: false,
+            message: "Only the manager of the document's team can approve or reject it",
+          });
+        }
+      } catch (err) {
+        return res.status(503).json({
+          success: false,
+          message: "Could not verify team manager — User Management Service unavailable",
+        });
+      }
+    }
     document.status = "rejected";
     document.approvedBy = user.ownerId;
     document.approvalDate = new Date();

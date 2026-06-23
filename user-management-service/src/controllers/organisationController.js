@@ -1,7 +1,7 @@
 const User = require("../models/User");
 const Organisation = require("../models/Organisation");
 const mongoose = require("mongoose");
-
+const Team = require("../models/Team");
 // ─────────────────────────────────────────
 // POST /organisations/members/:userId
 // Admin links an existing user to their organisation
@@ -94,6 +94,16 @@ const removeMember = async (req, res) => {
     }
 
     targetUser.organisationId = null;
+    // Remove user from all teams in this organisation
+    await Team.updateMany(
+      { organisationId: admin.organisationId },
+      {
+        $pull: {
+          memberIds: targetUser._id,
+          memberEmails: targetUser.email,
+        },
+      }
+    );
     await targetUser.save();
 
     res.status(200).json({

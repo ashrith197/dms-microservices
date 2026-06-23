@@ -3,6 +3,7 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const connectDB = require("./db");
+const validateEnv = require("./src/config/validateEnv");
 const documentRoutes = require("./src/routes/documentRoutes");
 const permissionGroupRoutes = require("./src/routes/permissionGroupRoutes");
 
@@ -11,7 +12,6 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-connectDB();
 app.use("/documents/permission-groups", permissionGroupRoutes);
 app.use("/documents", documentRoutes);
 
@@ -28,6 +28,20 @@ app.use((err, req, res, next) => {
   res.status(500).json({ success: false, message: "Internal server error" });
 });
 
-app.listen(process.env.PORT, () => {
-  console.log(`Document Service running on port ${process.env.PORT}`);
-});
+const start = async () => {
+  validateEnv(["PORT", "MONGO_URI"]);
+  await connectDB();
+
+  app.listen(process.env.PORT, () => {
+    console.log(`Document Service running on port ${process.env.PORT}`);
+  });
+};
+
+if (require.main === module) {
+  start().catch((err) => {
+    console.error("Failed to start Document Service:", err.message);
+    process.exit(1);
+  });
+}
+
+module.exports = { app, start };

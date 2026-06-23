@@ -19,10 +19,14 @@ const createTeam = async (req, res) => {
   try {
     const manager = req.gatewayUser;
     const { name, description, memberIds } = req.body;
+    if (!name || typeof name !== "string") {
+      return res.status(400).json({ success: false, message: "Team name is required" });
+    }
+
     const trimmedName = name.trim();
 
-    if (!name) {
-      return res.status(400).json({ success: false, message: "Team name is required" });
+    if (!trimmedName) {
+      return res.status(400).json({ success: false, message: "Team name cannot be blank" });
     }
 
     if (!manager.organisationId) {
@@ -115,7 +119,6 @@ const createTeam = async (req, res) => {
 const listTeams = async (req, res) => {
   try {
     const user = req.gatewayUser;
-
     if (!user.organisationId) {
       return res.status(400).json({
         success: false,

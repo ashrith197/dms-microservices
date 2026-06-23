@@ -72,7 +72,6 @@ const getUserPermissionGroupIds = async (userId, userRole, organisationId) => {
 
   try {
     const groups = await PermissionGroup.find({ organisationId });
-
     // Get user's team IDs from User Management Service
     let userTeamIds = [];
     try {

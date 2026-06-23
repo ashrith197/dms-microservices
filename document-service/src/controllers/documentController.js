@@ -107,11 +107,29 @@ const getDocuments = async (req, res) => {
     const query = { isDeleted: false };
 
     // Org scoping — always filter by org if available
-    if (organisationId) query.organisationId = organisationId;
 
     // Role-based scoping
     if (user.userRole !== "admin") {
-      query.ownerId = user.ownerId;
+      const { getUserPermissionGroupIds } = require("../utils/permissionHelper");
+
+      if (!organisationId) {
+        // User has no org — only show their own documents
+        query.ownerId = user.ownerId;
+      } else {
+        const accessibleGroupIds = await getUserPermissionGroupIds(
+          user.ownerId,
+          user.userRole,
+          organisationId
+        );
+
+        query.$or = [
+          { ownerId: user.ownerId },
+          { organisationId, permissionGroupIds: { $size: 0 } },
+          { organisationId, permissionGroupIds: { $in: accessibleGroupIds } },
+        ];
+      }
+    } else {
+      if (organisationId) query.organisationId = organisationId;
     }
 
     // Optional filters
@@ -154,14 +172,6 @@ const getDocumentById = async (req, res) => {
       return res.status(404).json({ success: false, message: "Document not found" });
     }
 
-    // Ownership check for non-admins
-    if (user.userRole !== "admin" && document.ownerId !== user.ownerId) {
-      return res.status(403).json({
-        success: false,
-        message: "Access denied — you do not own this document",
-      });
-    }
-
     // Permission group check
     const canAccess = await hasDocumentAccess(user.ownerId, user.userRole, document);
     if (!canAccess) {
@@ -202,13 +212,6 @@ const downloadDocument = async (req, res) => {
 
     if (!document) {
       return res.status(404).json({ success: false, message: "Document not found" });
-    }
-
-    if (user.userRole !== "admin" && document.ownerId !== user.ownerId) {
-      return res.status(403).json({
-        success: false,
-        message: "Access denied — you do not own this document",
-      });
     }
 
     const canAccess = await hasDocumentAccess(user.ownerId, user.userRole, document);
