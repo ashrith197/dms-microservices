@@ -68,8 +68,10 @@ const uploadDocument = async (req, res) => {
       filepath: normalizedPath,         // always forward slashes
       mimetype: req.file.mimetype,
       size: req.file.size,
-      ownerId: user.ownerId,
-      ownerEmail: user.ownerEmail,
+      ownerId:           user.ownerId,          // permanent audit — never changes
+      ownerEmail:        user.ownerEmail,       // permanent audit — never changes
+      currentOwnerId:    user.ownerId,          // NEW: live access control field
+      currentOwnerEmail: user.ownerEmail,       // NEW: updated on reassignment
       organisationId: organisationId || null,
       teamId: teamId || null,
       permissionGroupIds: parsedPermissionGroupIds,
@@ -114,7 +116,7 @@ const getDocuments = async (req, res) => {
 
       if (!organisationId) {
         // User has no org — only show their own documents
-        query.ownerId = user.ownerId;
+        query.currentOwnerId = user.ownerId;
       } else {
         const accessibleGroupIds = await getUserPermissionGroupIds(
           user.ownerId,
@@ -123,7 +125,7 @@ const getDocuments = async (req, res) => {
         );
 
         query.$or = [
-          { ownerId: user.ownerId },
+          { currentOwnerId: user.ownerId },
           { organisationId, permissionGroupIds: { $size: 0 } },
           { organisationId, permissionGroupIds: { $in: accessibleGroupIds } },
         ];
@@ -271,14 +273,14 @@ const updateDocument = async (req, res) => {
       return res.status(404).json({ success: false, message: "Document not found" });
     }
 
-    if (user.userRole !== "admin" && document.ownerId !== user.ownerId) {
+    if (user.userRole !== "admin" && document.currentOwnerId !== user.ownerId) {
       return res.status(403).json({
         success: false,
         message: "Access denied — you do not own this document",
       });
     }
 
-    // Whitelist — never allow updating ownerId, filepath, storedFilename, mimetype, size
+    // Whitelist — never allow updating ownerId, currentOwnerId, filepath, storedFilename, mimetype, size
     const allowedUpdates = ["title", "category", "tags", "teamId", "permissionGroupIds"];
     const updates = {};
 
@@ -341,7 +343,7 @@ const deleteDocument = async (req, res) => {
       return res.status(404).json({ success: false, message: "Document not found" });
     }
 
-    if (user.userRole !== "admin" && document.ownerId !== user.ownerId) {
+    if (user.userRole !== "admin" && document.currentOwnerId !== user.ownerId) {
       return res.status(403).json({
         success: false,
         message: "Access denied — you do not own this document",

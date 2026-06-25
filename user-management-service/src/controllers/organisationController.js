@@ -2,6 +2,7 @@ const User = require("../models/User");
 const Organisation = require("../models/Organisation");
 const mongoose = require("mongoose");
 const Team = require("../models/Team");
+const axios = require("axios");
 // ─────────────────────────────────────────
 // POST /organisations/members/:userId
 // Admin links an existing user to their organisation
@@ -61,10 +62,11 @@ const addMember = async (req, res) => {
 };
 
 // ─────────────────────────────────────────
-// DELETE /organisations/members/:userId
-// Admin removes a user from their organisation
+// POST /organisations/members/:userId/suspend
+// Admin suspends an active employee
+// Immediate effect — next request by this user returns 401
 // ─────────────────────────────────────────
-const removeMember = async (req, res) => {
+const suspendMember = async (req, res) => {
   try {
     const { userId } = req.params;
     const admin = req.gatewayUser;
@@ -73,11 +75,10 @@ const removeMember = async (req, res) => {
       return res.status(400).json({ success: false, message: "Invalid user ID" });
     }
 
-    // Prevent admin from removing themselves
     if (userId === admin.userId) {
       return res.status(403).json({
         success: false,
-        message: "Admin cannot remove themselves from the organisation",
+        message: "Admin cannot suspend their own account",
       });
     }
 
@@ -93,8 +94,28 @@ const removeMember = async (req, res) => {
       });
     }
 
-    targetUser.organisationId = null;
-    // Remove user from all teams in this organisation
+    if (targetUser.role === "admin") {
+      return res.status(403).json({
+        success: false,
+        message: "Cannot suspend another admin",
+      });
+    }
+
+    if (targetUser.accountStatus === "suspended") {
+      return res.status(409).json({
+        success: false,
+        message: "User is already suspended",
+      });
+    }
+
+    if (targetUser.accountStatus === "archived") {
+      return res.status(409).json({
+        success: false,
+        message: "User is already archived",
+      });
+    }
+
+    // Remove from all teams immediately
     await Team.updateMany(
       { organisationId: admin.organisationId },
       {
@@ -104,11 +125,169 @@ const removeMember = async (req, res) => {
         },
       }
     );
-    await targetUser.save();
+
+    // Suspend the account
+    await User.findByIdAndUpdate(userId, {
+      $set: {
+        accountStatus: "suspended",
+        suspendedAt: new Date(),
+        suspendedBy: admin.userId,
+      },
+    });
 
     res.status(200).json({
       success: true,
-      message: "User removed from organisation successfully",
+      message: "User suspended successfully. Their next request will be blocked.",
+      userId,
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+// ─────────────────────────────────────────
+// POST /organisations/members/:userId/reassign
+// Admin or Manager reassigns all documents from suspended user to another
+// Body: { newOwnerId: "<userId>" }
+// ─────────────────────────────────────────
+const reassignMember = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { newOwnerId } = req.body;
+    const admin = req.gatewayUser;
+
+    if (!newOwnerId) {
+      return res.status(400).json({
+        success: false,
+        message: "newOwnerId is required",
+      });
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(userId) ||
+        !mongoose.Types.ObjectId.isValid(newOwnerId)) {
+      return res.status(400).json({ success: false, message: "Invalid user ID" });
+    }
+
+    const suspendedUser = await User.findOne({
+      _id: userId,
+      organisationId: admin.organisationId,
+      accountStatus: "suspended",
+    });
+
+    if (!suspendedUser) {
+      return res.status(404).json({
+        success: false,
+        message: "Suspended user not found in your organisation",
+      });
+    }
+
+    const newOwner = await User.findOne({
+      _id: newOwnerId,
+      organisationId: admin.organisationId,
+      accountStatus: "active",
+    });
+
+    if (!newOwner) {
+      return res.status(404).json({
+        success: false,
+        message: "New owner not found or not active in your organisation",
+      });
+    }
+
+    // Call Document Service internal endpoint to bulk reassign
+    try {
+      await axios.patch(
+        `${process.env.DOCUMENT_SERVICE_URL}/documents/internal/reassign`,
+        {
+          fromOwnerId:    userId,
+          toOwnerId:      newOwnerId,
+          toOwnerEmail:   newOwner.email,
+          organisationId: admin.organisationId,
+        },
+        { timeout: 10000 }
+      );
+    } catch (err) {
+      return res.status(503).json({
+        success: false,
+        message: "Document Service unavailable — reassignment could not complete",
+      });
+    }
+
+    // Mark reassignment on suspended user record
+    await User.findByIdAndUpdate(userId, {
+      $set: { reassignedTo: newOwnerId },
+    });
+
+    res.status(200).json({
+      success: true,
+      message: `All documents reassigned from ${suspendedUser.email} to ${newOwner.email}`,
+      from: suspendedUser.email,
+      to: newOwner.email,
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+// ─────────────────────────────────────────
+// POST /organisations/members/:userId/archive
+// Admin permanently archives a suspended user
+// Only allowed when no documents remain under their currentOwnerId
+// ─────────────────────────────────────────
+const archiveMember = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const admin = req.gatewayUser;
+
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return res.status(400).json({ success: false, message: "Invalid user ID" });
+    }
+
+    const suspendedUser = await User.findOne({
+      _id: userId,
+      organisationId: admin.organisationId,
+      accountStatus: "suspended",
+    });
+
+    if (!suspendedUser) {
+      return res.status(404).json({
+        success: false,
+        message: "Suspended user not found. Only suspended users can be archived.",
+      });
+    }
+
+    // Verify no documents remain under their currentOwnerId
+    try {
+      const checkResponse = await axios.get(
+        `${process.env.DOCUMENT_SERVICE_URL}/documents/internal/owner-check/${userId}`,
+        { timeout: 5000 }
+      );
+
+      if (checkResponse.data.count > 0) {
+        return res.status(400).json({
+          success: false,
+          message: `Cannot archive — ${checkResponse.data.count} document(s) still assigned to this user. Complete reassignment first.`,
+          remainingDocuments: checkResponse.data.count,
+        });
+      }
+    } catch (err) {
+      return res.status(503).json({
+        success: false,
+        message: "Document Service unavailable — archive check could not complete",
+      });
+    }
+
+    await User.findByIdAndUpdate(userId, {
+      $set: {
+        accountStatus: "archived",
+        archivedAt: new Date(),
+      },
+    });
+
+    res.status(200).json({
+      success: true,
+      message: "User archived successfully. Account is permanently inactive.",
+      userId,
     });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
@@ -260,9 +439,12 @@ const getUsersByIds = async (req, res) => {
 
 module.exports = {
   addMember,
-  removeMember,
   listMembers,
   updateMemberRole,
   getUserById,
   getUsersByIds,
+  suspendMember,
+  reassignMember,
+  archiveMember,
+  // removeMember REMOVED — replaced by suspend/reassign/archive lifecycle
 };

@@ -6,12 +6,16 @@ const connectDB = require("./db");
 const validateEnv = require("./src/config/validateEnv");
 const documentRoutes = require("./src/routes/documentRoutes");
 const permissionGroupRoutes = require("./src/routes/permissionGroupRoutes");
+const internalRoutes = require("./src/routes/internalRoutes");
 
 const app = express();
 
 app.use(cors());
 app.use(express.json());
 
+// Mount internal routes BEFORE regular document routes
+// This ensures /documents/internal/* is handled before /documents/*
+app.use("/documents/internal", internalRoutes);
 app.use("/documents/permission-groups", permissionGroupRoutes);
 app.use("/documents", documentRoutes);
 

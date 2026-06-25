@@ -219,6 +219,21 @@ const verifyToken = async (req, res) => {
       });
     }
 
+    // ── NEW: Account status gate ────────────────────────────────
+    // Suspended and archived accounts are blocked on every request
+    // regardless of token validity or expiry
+    if (user.accountStatus !== "active") {
+      return res.status(401).json({
+        success: false,
+        valid: false,
+        message:
+          user.accountStatus === "suspended"
+            ? "Your account has been suspended. Contact your administrator."
+            : "Your account has been archived and is no longer active.",
+      });
+    }
+    // ───────────────────────────────────────────────────────────
+
     res.status(200).json({
       success: true,
       valid: true,
@@ -228,6 +243,7 @@ const verifyToken = async (req, res) => {
         email: user.email,
         role: user.role,
         organisationId: user.organisationId,
+        accountStatus: user.accountStatus,   // ← include so gateway can log it
       },
     });
   } catch (err) {

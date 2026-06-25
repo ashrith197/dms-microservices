@@ -31,12 +31,35 @@ const userSchema = new mongoose.Schema(
       ref: "Organisation",
       default: null,
     },
+    // ── NEW: Account lifecycle ──────────────────────────────────
+    accountStatus: {
+      type: String,
+      enum: ["active", "suspended", "archived"],
+      default: "active",
+    },
+    suspendedAt: {
+      type: Date,
+      default: null,
+    },
+    suspendedBy: {
+      type: String,        // userId of admin who suspended
+      default: null,
+    },
+    archivedAt: {
+      type: Date,
+      default: null,
+    },
+    reassignedTo: {
+      type: String,        // userId who absorbed their documents
+      default: null,
+    },
   },
   { timestamps: true }
 );
 
 // Index on organisationId for efficient multi-tenant queries
 userSchema.index({ organisationId: 1 });
+userSchema.index({ accountStatus: 1 });
 
 // Hash password before saving
 userSchema.pre("save", async function () {

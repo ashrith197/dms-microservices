@@ -14,8 +14,8 @@ const hasDocumentAccess = async (userId, userRole, document) => {
   // Admin always has access
   if (userRole === "admin") return true;
 
-  // Owner always has access to their own document
-  if (document.ownerId === userId) return true;
+  // Current owner always has access to their document
+  if (document.currentOwnerId === userId) return true;
 
   // No permission groups set — public to entire organisation
   if (!document.permissionGroupIds || document.permissionGroupIds.length === 0) {

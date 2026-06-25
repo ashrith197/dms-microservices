@@ -43,12 +43,23 @@ const documentSchema = new mongoose.Schema(
     ownerId: {
       type: String,
       required: true,
-      // from x-user-id header
+      // from x-user-id header — permanent audit trail, NEVER changes
     },
     ownerEmail: {
       type: String,
       required: true,
-      // from x-user-email header
+      // from x-user-email header — permanent audit trail, NEVER changes
+    },
+    // ── NEW: Separated ownership ────────────────────────────────
+    // ownerId / ownerEmail = NEVER changes. Permanent creator for audit trail.
+    // currentOwnerId / currentOwnerEmail = live access control. Updated on reassignment.
+    currentOwnerId: {
+      type: String,
+      required: true,         // set to ownerId on upload, updated on reassignment
+    },
+    currentOwnerEmail: {
+      type: String,
+      required: true,
     },
     // ── NEW: Multi-tenancy ──────────────────────────────
     organisationId: {
@@ -94,6 +105,7 @@ const documentSchema = new mongoose.Schema(
 
 // Existing indexes
 documentSchema.index({ ownerId: 1 });
+documentSchema.index({ currentOwnerId: 1 });
 documentSchema.index({ isDeleted: 1 });
 documentSchema.index({ title: "text", category: "text", tags: "text" });
 
