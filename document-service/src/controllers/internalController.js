@@ -7,9 +7,8 @@ const Document = require("../models/Document");
 // ─────────────────────────────────────────
 const reassignDocuments = async (req, res) => {
   try {
-    const { fromUserId, toUserId, toUserEmail, organisationId } = req.body;
-
-    if (!fromUserId || !toUserId || !toUserEmail) {
+    const { fromOwnerId, toOwnerId, toOwnerEmail, organisationId } = req.body;
+    if (!fromOwnerId || !toOwnerId || !toOwnerEmail) {
       return res.status(400).json({
         success: false,
         message: "fromUserId, toUserId, and toUserEmail are required",
@@ -18,7 +17,7 @@ const reassignDocuments = async (req, res) => {
 
     // Build query to find all documents owned by the user being offboarded
     const query = {
-      currentOwnerId: fromUserId,
+      currentOwnerId: fromOwnerId,
       isDeleted: false,
     };
 
@@ -31,15 +30,14 @@ const reassignDocuments = async (req, res) => {
       query,
       {
         $set: {
-          currentOwnerId: toUserId,
-          currentOwnerEmail: toUserEmail,
+          currentOwnerId: toOwnerId,
+          currentOwnerEmail: toOwnerEmail,
         },
       }
     );
-
     res.status(200).json({
       success: true,
-      message: `Reassigned ${result.modifiedCount} document(s) from ${fromUserId} to ${toUserId}`,
+      message: `Reassigned ${result.modifiedCount} document(s) from ${fromOwnerId} to ${toOwnerId}`,
       count: result.modifiedCount,
     });
   } catch (err) {

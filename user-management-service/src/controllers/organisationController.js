@@ -262,12 +262,11 @@ const archiveMember = async (req, res) => {
         `${process.env.DOCUMENT_SERVICE_URL}/documents/internal/owner-check/${userId}`,
         { timeout: 5000 }
       );
-
-      if (checkResponse.data.count > 0) {
+      if (checkResponse.data.documentCount > 0) {
         return res.status(400).json({
           success: false,
-          message: `Cannot archive — ${checkResponse.data.count} document(s) still assigned to this user. Complete reassignment first.`,
-          remainingDocuments: checkResponse.data.count,
+          message: `Cannot archive — ${checkResponse.data.documentCount} document(s) still assigned to this user. Complete reassignment first.`,
+          remainingDocuments: checkResponse.data.documentCount,
         });
       }
     } catch (err) {
