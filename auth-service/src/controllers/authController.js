@@ -176,6 +176,17 @@ const login = async (req, res) => {
       });
     }
 
+    // FIX 2: Block suspended and archived users from logging in
+    if (user.accountStatus !== "active") {
+      return res.status(401).json({
+        success: false,
+        message:
+          user.accountStatus === "suspended"
+            ? "Your account has been suspended. Contact your administrator."
+            : "Your account has been archived and is no longer active.",
+      });
+    }
+
     const token = generateToken(user);
 
     res.status(200).json({

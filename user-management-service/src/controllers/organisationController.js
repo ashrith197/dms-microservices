@@ -181,6 +181,15 @@ const reassignMember = async (req, res) => {
       });
     }
 
+    // FIX 1: Prevent double reassignment
+    if (suspendedUser.reassignedTo) {
+      return res.status(409).json({
+        success: false,
+        message: `Documents already reassigned to another user. Cannot reassign twice.`,
+        alreadyReassignedTo: suspendedUser.reassignedTo,
+      });
+    }
+
     const newOwner = await User.findOne({
       _id: newOwnerId,
       organisationId: admin.organisationId,
