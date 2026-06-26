@@ -1,11 +1,12 @@
 {
-  "name": "notification-service",
+  "name": "logging-service",
   "version": "1.0.0",
   "scripts": {
     "dev": "nodemon app.js",
     "start": "node app.js"
   },
   "dependencies": {
+    "amqplib": "^0.10.4",
     "cors": "^2.8.5",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",

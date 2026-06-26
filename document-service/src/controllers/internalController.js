@@ -1,4 +1,5 @@
 const Document = require("../models/Document");
+const { notifyDocumentsReassigned } = require("../services/notificationService");
 
 // ─────────────────────────────────────────
 // PATCH /documents/internal/reassign
@@ -35,6 +36,16 @@ const reassignDocuments = async (req, res) => {
         },
       }
     );
+
+    // Fire reassignment event
+    notifyDocumentsReassigned({
+      fromOwnerId,
+      toOwnerId,
+      toOwnerEmail,
+      organisationId,
+      count: result.modifiedCount,
+    });
+
     res.status(200).json({
       success: true,
       message: `Reassigned ${result.modifiedCount} document(s) from ${fromOwnerId} to ${toOwnerId}`,

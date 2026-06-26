@@ -4,6 +4,7 @@ const express = require("express");
 const cors = require("cors");
 const connectDB = require("./db");
 const validateEnv = require("./src/config/validateEnv");
+const { connect: connectQueue } = require("./src/services/queueService");
 const documentRoutes = require("./src/routes/documentRoutes");
 const permissionGroupRoutes = require("./src/routes/permissionGroupRoutes");
 const internalRoutes = require("./src/routes/internalRoutes");
@@ -35,6 +36,7 @@ app.use((err, req, res, next) => {
 const start = async () => {
   validateEnv(["PORT", "MONGO_URI"]);
   await connectDB();
+  connectQueue(); // non-blocking — falls back gracefully if RabbitMQ unavailable
 
   app.listen(process.env.PORT, () => {
     console.log(`Document Service running on port ${process.env.PORT}`);

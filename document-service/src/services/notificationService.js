@@ -1,54 +1,62 @@
+const { publishEvent } = require("./queueService");
 const axios = require("axios");
 
-const sendNotification = (eventData) => {
+const buildPayload = (event, document, extra = {}) => ({
+  event,
+  documentId:     document._id,
+  title:          document.title,
+  ownerId:        document.ownerId,           // original creator — audit
+  currentOwnerId: document.currentOwnerId,    // active owner — access
+  ownerEmail:     document.ownerEmail,
+  organisationId: document.organisationId,
+  teamId:         document.teamId || null,
+  filename:       document.filename || null,
+  timestamp:      new Date().toISOString(),
+  ...extra,
+});
+
+const httpFallback = (payload) => {
   axios
     .post(
       `${process.env.NOTIFICATION_SERVICE_URL}/notifications/events`,
-      eventData,
+      payload,
       { timeout: 3000 }
     )
     .catch((err) => {
-      console.warn(
-        `[Notification] Failed to send "${eventData.event}":`,
-        err.message
-      );
+      console.warn("[Notification] HTTP fallback failed:", err.message);
     });
 };
 
-const notifyDocumentUploaded = (document) => {
-  sendNotification({
-    event: "document_uploaded",
-    documentId: document._id,
-    title: document.title,
-    ownerId: document.ownerId,
-    ownerEmail: document.ownerEmail,
-    organisationId: document.organisationId,
-    filename: document.filename,
-    timestamp: new Date().toISOString(),
-  });
+const sendEvent = (routingKey, payload) => {
+  try {
+    publishEvent(routingKey, payload);
+  } catch {
+    httpFallback(payload);
+  }
+};
+
+const notifyDocumentUploaded = (document, extra = {}) => {
+  sendEvent("document.uploaded", buildPayload("document_uploaded", document, extra));
 };
 
 const notifyDocumentDeleted = (document) => {
-  sendNotification({
-    event: "document_deleted",
-    documentId: document._id,
-    title: document.title,
-    ownerId: document.ownerId,
-    ownerEmail: document.ownerEmail,
-    organisationId: document.organisationId,
-    timestamp: new Date().toISOString(),
-  });
+  sendEvent("document.deleted", buildPayload("document_deleted", document));
 };
 
 const notifyDocumentUpdated = (document) => {
-  sendNotification({
-    event: "document_updated",
-    documentId: document._id,
-    title: document.title,
-    ownerId: document.ownerId,
-    ownerEmail: document.ownerEmail,
-    organisationId: document.organisationId,
-    timestamp: new Date().toISOString(),
+  sendEvent("document.updated", buildPayload("document_updated", document));
+};
+
+// ── NEW: Offboarding event ──────────────────────────────────
+const notifyDocumentsReassigned = ({ fromOwnerId, toOwnerId, toOwnerEmail, organisationId, count }) => {
+  publishEvent("documents.reassigned", {
+    event:          "documents_reassigned",
+    fromOwnerId,
+    toOwnerId,
+    toOwnerEmail,
+    organisationId,
+    count,
+    timestamp:      new Date().toISOString(),
   });
 };
 
@@ -56,4 +64,5 @@ module.exports = {
   notifyDocumentUploaded,
   notifyDocumentDeleted,
   notifyDocumentUpdated,
+  notifyDocumentsReassigned,
 };
