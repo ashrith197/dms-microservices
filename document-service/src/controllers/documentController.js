@@ -1,5 +1,6 @@
 const path = require("path");
 const fs = require("fs");
+const axios = require("axios");
 const Document = require("../models/Document");
 const { extractUserHeaders, parseTags, sanitizeOwnerId, extractOrgId } = require("../utils/helpers");
 const { hasDocumentAccess } = require("../utils/permissionHelper");
@@ -78,7 +79,36 @@ const uploadDocument = async (req, res) => {
       status: "draft",
     });
 
-    notifyDocumentUploaded(document);
+    // Fetch team member emails for notification
+    let teamMemberEmails = [];
+    if (teamId) {
+      try {
+        const teamResponse = await axios.get(
+          `${process.env.USER_MANAGEMENT_SERVICE_URL}/teams/${teamId}`,
+          {
+            headers: {
+              "x-user-id": user.ownerId,
+              "x-user-role": user.userRole,
+              "x-organisation-id": organisationId?.toString() || "",
+            },
+            timeout: 5000,
+          }
+        );
+        const team = teamResponse.data.team;
+        if (team.members && Array.isArray(team.members)) {
+          teamMemberEmails = team.members
+            .map(member => member.email)
+            .filter(email => email && email !== user.ownerEmail); // Exclude uploader
+        }
+      } catch (err) {
+        console.warn("[Upload] Could not fetch team members:", err.message);
+      }
+    }
+
+    notifyDocumentUploaded(document, {
+      teamMemberEmails,
+      ownerName: user.userName,
+    });
 
     res.status(201).json({
       success: true,

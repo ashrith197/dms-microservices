@@ -13,6 +13,8 @@ const EXCHANGE    = "document_events";
 const QUEUE       = "notification_queue";
 const ROUTING_KEYS = [
   "document.uploaded",
+  "document.updated",
+  "document.deleted",
   "document.approved",
   "document.rejected",
   "document.submitted_for_approval",
@@ -87,6 +89,18 @@ const processEvent = async (payload) => {
         reason:     metadata.reason,
       });
       await sendAndRecord({ to: payload.ownerEmail, subject, html, eventType: event, organisationId });
+      break;
+    }
+
+    case "document_updated": {
+      // Log only - no email notification for updates
+      console.log(`[Notification] Document updated: ${payload.title} (no email sent)`);
+      break;
+    }
+
+    case "document_deleted": {
+      // Log only - no email notification for deletions
+      console.log(`[Notification] Document deleted: ${payload.title} (no email sent)`);
       break;
     }
 

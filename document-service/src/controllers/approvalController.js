@@ -1,27 +1,31 @@
 const Document = require("../models/Document");
 const { extractUserHeaders, extractOrgId } = require("../utils/helpers");
 const axios = require("axios");
+const { publishEvent } = require("../services/queueService");
 
-// Helper: fire approval event — reuse notification service pattern
+// Helper: fire approval event — publish to RabbitMQ
 const notifyApprovalEvent = (event, document, extra = {}) => {
-  axios
-    .post(
-      `${process.env.NOTIFICATION_SERVICE_URL}/notifications/events`,
-      {
-        event,
-        documentId: document._id,
-        title: document.title,
-        ownerId: document.ownerId,
-        ownerEmail: document.ownerEmail,
-        organisationId: document.organisationId,
-        timestamp: new Date().toISOString(),
-        ...extra,
-      },
-      { timeout: 3000 }
-    )
-    .catch((err) => {
-      console.warn(`[Notification] Failed to send "${event}":`, err.message);
-    });
+  // Convert event name to routing key: document_submitted_for_approval -> document.submitted_for_approval
+  // Keep underscores in "submitted_for_approval" together
+  let routingKey;
+  if (event === "document_submitted_for_approval") {
+    routingKey = "document.submitted_for_approval";
+  } else {
+    routingKey = event.replace(/_/g, ".");
+  }
+  
+  const payload = {
+    event,
+    documentId: document._id,
+    title: document.title,
+    ownerId: document.ownerId,
+    ownerEmail: document.ownerEmail,
+    organisationId: document.organisationId,
+    timestamp: new Date().toISOString(),
+    metadata: extra,
+  };
+  
+  publishEvent(routingKey, payload);
 };
 
 // ─────────────────────────────────────────
@@ -69,7 +73,34 @@ const submitForApproval = async (req, res) => {
     document.status = "pending_approval";
     await document.save();
 
-    notifyApprovalEvent("document_submitted_for_approval", document);
+    // Fetch manager email for notification
+    let managerEmail = null;
+    if (document.teamId) {
+      try {
+        const teamResponse = await axios.get(
+          `${process.env.USER_MANAGEMENT_SERVICE_URL}/teams/${document.teamId}`,
+          {
+            headers: {
+              "x-user-id": user.ownerId,
+              "x-user-role": user.userRole,
+              "x-organisation-id": document.organisationId?.toString() || "",
+            },
+            timeout: 5000,
+          }
+        );
+        const team = teamResponse.data.team;
+        if (team.managerEmail) {
+          managerEmail = team.managerEmail;
+        }
+      } catch (err) {
+        console.warn("[Submit] Could not fetch team manager email:", err.message);
+      }
+    }
+
+    notifyApprovalEvent("document_submitted_for_approval", document, {
+      managerEmail,
+      ownerName: user.userName,
+    });
 
     res.status(200).json({
       success: true,
